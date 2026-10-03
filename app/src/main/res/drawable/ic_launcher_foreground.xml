@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A soft hill under a low sun, with a single sheep. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#E3C27A" android:pathData="M54,46m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0" />
+    <path android:fillColor="#8FA98A" android:pathData="M18,74 C34,58 52,56 72,62 C80,64 86,68 90,74 L90,90 L18,90 Z" />
+    <path android:fillColor="#5F7A5B" android:pathData="M18,80 C40,70 64,70 90,80 L90,90 L18,90 Z" />
+    <path android:fillColor="#FFFDF8" android:pathData="M48,66 C48,62 52,60 55,61 C57,59 61,60 62,63 C65,63 66,67 63,68 L50,68 C48,68 47,67 48,66 Z" />
+    <path android:fillColor="#3B3127" android:pathData="M62,62.5m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+</vector>
