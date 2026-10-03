@@ -28,6 +28,9 @@ interface FocusStory {
     val completionTitle: String
     val phases: List<StoryPhase>
 
+    /** Spoken by screen readers for the ending scene. */
+    val endingDescription: String get() = "The shepherd returns to the flock with the lost sheep, in warm light."
+
     fun phaseAt(progress: Float): StoryPhase =
         phases.lastOrNull { progress >= it.start } ?: phases.first()
 
@@ -52,12 +55,10 @@ interface FocusStory {
 }
 
 object Stories {
-    val all: List<FocusStory> = listOf(LostSheepStory)
+    val all: List<FocusStory> = listOf(LostSheepStory, DavidStory, NoahStory)
 
     /** Shown in Settings so people know what is coming. */
     val comingSoon = listOf(
-        "David & Goliath" to "1 Samuel 17",
-        "Noah" to "Genesis 6–9",
         "Daniel" to "Daniel 6",
         "Jesus in the Wilderness" to "Matthew 4",
     )

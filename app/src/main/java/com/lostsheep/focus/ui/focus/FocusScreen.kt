@@ -112,6 +112,7 @@ fun FocusHome(
     onSelectDuration: (Int) -> Unit,
     onChooseApps: () -> Unit,
     onFixBlocking: () -> Unit,
+    onChooseStory: () -> Unit,
 ) {
     val muted = LocalSheepColors.current.muted
     val minutes = settings.defaultDurationMin
@@ -149,10 +150,13 @@ fun FocusHome(
                 .fillMaxWidth()
                 .height(132.dp)
                 .clip(RoundedCornerShape(24.dp))
-                .clearAndSetSemantics { contentDescription = "Hills and mountains with the flock and the shepherd" },
+                .clearAndSetSemantics { contentDescription = story.phases.first().description },
         )
+        TextButton(onClick = onChooseStory) {
+            Text("Story: ${story.title} · Change", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        }
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(12.dp))
         Text(
             formatClock(minutes * 60_000L),
             style = MaterialTheme.typography.displayLarge,
@@ -569,7 +573,7 @@ fun CompletionScreen(
 
     val ending = rememberStoryClips(story)?.endingPath
     var videoShowing by remember { mutableStateOf(false) }
-    val endingDescription = Modifier.clearAndSetSemantics { contentDescription = "The shepherd returns to the flock with the lost sheep, in warm light." }
+    val endingDescription = Modifier.clearAndSetSemantics { contentDescription = story.endingDescription }
 
     Box(Modifier.fillMaxSize().background(Color(0xFF62AC48))) {
         if (!videoShowing) {

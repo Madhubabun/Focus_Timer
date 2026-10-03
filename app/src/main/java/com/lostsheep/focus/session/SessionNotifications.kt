@@ -107,7 +107,7 @@ object SessionNotifications {
         runCatching { NotificationManagerCompat.from(context).notify(id, n) }
     }
 
-    fun showCompleted(context: Context, outcome: SessionOutcome) {
+    fun showCompleted(context: Context, outcome: SessionOutcome, title: String) {
         ensureChannels(context)
         val minutes = outcome.focusedMs / 60_000
         post(
@@ -115,7 +115,7 @@ object SessionNotifications {
             ID_COMPLETED,
             NotificationCompat.Builder(context, CHANNEL_ALERTS)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("The lost sheep is found.")
+                .setContentTitle(title)
                 .setContentText("Well done. $minutes minutes focused.")
                 .setAutoCancel(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
