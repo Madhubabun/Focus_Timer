@@ -20,5 +20,6 @@ class BootReceiver : BroadcastReceiver() {
         // Creating the container restores the saved session, re-anchors its clock and completes it if due.
         val manager = (context.applicationContext as LostSheepApp).container.sessionManager
         if (manager.hasActiveSession) manager.ensureServiceRunning()
+        // Starting the app already re-armed the daily reminder and scheduled sessions.
     }
 }

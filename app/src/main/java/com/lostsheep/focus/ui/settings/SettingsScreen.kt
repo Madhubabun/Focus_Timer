@@ -61,6 +61,19 @@ import com.lostsheep.focus.story.Verses
 import com.lostsheep.focus.ui.components.FullWidthDivider
 import com.lostsheep.focus.ui.components.SheepIcons
 import com.lostsheep.focus.ui.focus.PermissionCopy
+import com.lostsheep.focus.ui.focus.ScheduleDialog
+import com.lostsheep.focus.ui.focus.TimeOfDayDialog
+import com.lostsheep.focus.data.FocusSchedule
+import com.lostsheep.focus.data.describeDays
+import com.lostsheep.focus.data.formatMinuteOfDay
+import com.lostsheep.focus.reminders.Reminders
+import com.lostsheep.focus.story.ClosingWords
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import java.time.DayOfWeek
+import java.util.UUID
 import com.lostsheep.focus.ui.focus.PermissionExplainDialog
 import com.lostsheep.focus.ui.theme.LocalSheepColors
 
@@ -127,6 +140,11 @@ fun SettingsScreen(
     onSound: (Boolean) -> Unit,
     onTimerNotification: (Boolean) -> Unit,
     onVerse: (String) -> Unit,
+    onVersesWhileFocusing: (Boolean) -> Unit,
+    onClosingWords: (ClosingWords) -> Unit,
+    onReminder: (Boolean, Int) -> Unit,
+    onSaveSchedule: (FocusSchedule) -> Unit,
+    onDeleteSchedule: (String) -> Unit,
     onChooseApps: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -135,6 +153,16 @@ fun SettingsScreen(
     var askAccessibility by remember { mutableStateOf(false) }
     var askUsage by remember { mutableStateOf(false) }
     var showVerses by remember { mutableStateOf(false) }
+    var pickReminderTime by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<FocusSchedule?>(null) }
+    // Turning the reminder on asks for notifications first on Android 13 and later.
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        onReminder(true, settings.reminderMinute)
+    }
+    fun enableReminder() {
+        if (!status.notifications && Build.VERSION.SDK_INT >= 33) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        else onReminder(true, settings.reminderMinute)
+    }
 
     Column(
         Modifier
@@ -148,7 +176,7 @@ fun SettingsScreen(
 
         Section("Focus")
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(15, 25, 45, 60).forEach { m ->
+            listOf(5, 15, 25, 45, 60).forEach { m ->
                 val selected = settings.defaultDurationMin == m
                 TextButton(onClick = { onDuration(m) }) {
                     Text("$m min", color = if (selected) MaterialTheme.colorScheme.primary else muted)
@@ -163,6 +191,43 @@ fun SettingsScreen(
             style = MaterialTheme.typography.labelMedium,
             color = muted,
         )
+        Spacer(Modifier.height(16.dp))
+        FullWidthDivider()
+
+        Section("Scheduled focus")
+        if (settings.schedules.isEmpty()) {
+            Text(
+                "Set times when a session starts by itself, like weekday mornings.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = muted,
+            )
+        }
+        settings.schedules.forEach { sch ->
+            Row(Modifier.fillMaxWidth().clickable { editing = sch }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("${formatMinuteOfDay(sch.minuteOfDay)} · ${sch.durationMin} min", style = MaterialTheme.typography.bodyLarge)
+                    Text(describeDays(sch.days), style = MaterialTheme.typography.bodyMedium, color = muted)
+                }
+                Switch(checked = sch.enabled, onCheckedChange = { onSaveSchedule(sch.copy(enabled = it)) })
+                TextButton(onClick = { onDeleteSchedule(sch.id) }) { Text("Remove", color = muted) }
+            }
+        }
+        TextButton(onClick = {
+            editing = FocusSchedule(
+                id = UUID.randomUUID().toString(),
+                minuteOfDay = 9 * 60,
+                days = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY),
+                durationMin = settings.defaultDurationMin,
+            )
+        }) { Text("Add a scheduled session") }
+        if (settings.schedules.any { it.enabled } && !Reminders.canUseExactAlarms(context) && Build.VERSION.SDK_INT >= 31) {
+            SettingRow("Start on the minute", "Allow alarms & reminders so scheduled sessions start exactly on time") {
+                openSafely(
+                    context,
+                    Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")),
+                )
+            }
+        }
         Spacer(Modifier.height(16.dp))
         FullWidthDivider()
 
@@ -199,8 +264,35 @@ fun SettingsScreen(
         Spacer(Modifier.height(16.dp))
         FullWidthDivider()
 
-        Section("Reflection")
-        SettingRow("Bible verse", Verses.byId(settings.verseId).reference) { showVerses = !showVerses }
+        Section("Daily reminder")
+        ToggleRow(
+            "Remind me to focus",
+            "A gentle reminder with a verse, skipped on days you have already focused",
+            settings.reminderOn,
+        ) { on -> if (on) enableReminder() else onReminder(false, settings.reminderMinute) }
+        if (settings.reminderOn) {
+            SettingRow("Reminder time", formatMinuteOfDay(settings.reminderMinute)) { pickReminderTime = true }
+        }
+        Spacer(Modifier.height(16.dp))
+        FullWidthDivider()
+
+        Section("Verses & prayer")
+        ToggleRow("Verses while you focus", "A Bible verse fades in over the story every few minutes", settings.versesWhileFocusing, onVersesWhileFocusing)
+        Text("When a session ends", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 10.dp))
+        ClosingWords.entries.forEach { c ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(role = Role.RadioButton) { onClosingWords(c) }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = c == settings.closingWords, onClick = null)
+                Spacer(Modifier.width(8.dp))
+                Text(c.label, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+        SettingRow("Journey verse", Verses.byId(settings.verseId).reference) { showVerses = !showVerses }
         if (showVerses) {
             Verses.all.forEach { v ->
                 Row(
@@ -234,6 +326,18 @@ fun SettingsScreen(
     PermissionRequests(askAccessibility, askUsage) {
         askAccessibility = false
         askUsage = false
+    }
+    if (pickReminderTime) {
+        TimeOfDayDialog("Reminder time", settings.reminderMinute, onDismiss = { pickReminderTime = false }) {
+            pickReminderTime = false
+            onReminder(true, it)
+        }
+    }
+    editing?.let { sch ->
+        ScheduleDialog(sch, onDismiss = { editing = null }) {
+            editing = null
+            onSaveSchedule(it)
+        }
     }
 }
 

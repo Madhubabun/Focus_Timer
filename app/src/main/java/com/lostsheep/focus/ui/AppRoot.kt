@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lostsheep.focus.story.Stories
 import com.lostsheep.focus.story.Verses
+import com.lostsheep.focus.story.closingFor
 import com.lostsheep.focus.ui.components.SheepIcons
 import com.lostsheep.focus.ui.focus.BreakScreen
 import com.lostsheep.focus.ui.focus.CompletionScreen
@@ -71,6 +72,7 @@ fun AppRoot(requests: ExternalRequests, vm: FocusViewModel = viewModel()) {
     val stats by vm.stats.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
     val installedApps by vm.installedApps.collectAsStateWithLifecycle()
+    val intention by vm.intentionDraft.collectAsStateWithLifecycle()
     val permissions = rememberPermissionStatus()
 
     var tab by rememberSaveable { mutableStateOf(Tab.Focus) }
@@ -130,7 +132,7 @@ fun AppRoot(requests: ExternalRequests, vm: FocusViewModel = viewModel()) {
             }
             when (tab) {
                 Tab.Focus -> FocusTab(
-                    vmState = FocusTabState(active, outcome, settings, stats, blockedApps.size, permissions.blockingReady),
+                    vmState = FocusTabState(active, outcome, settings, stats, blockedApps.size, permissions.blockingReady, intention),
                     vm = vm,
                     story = story,
                     onChooseApps = { pickingApps = true },
@@ -138,7 +140,7 @@ fun AppRoot(requests: ExternalRequests, vm: FocusViewModel = viewModel()) {
                     onEndRequest = { requests.confirmEnd.value = true },
                 )
                 Tab.Journey -> JourneyScreen(stats.totalCompleted, history, Verses.byId(settings.verseId), isSystemInDarkTheme())
-                Tab.Stats -> StatsScreen(stats)
+                Tab.Stats -> StatsScreen(stats, settings.dailyGoalSessions)
                 Tab.Settings -> SettingsScreen(
                     settings = settings,
                     blockedApps = blockedApps,
@@ -148,6 +150,11 @@ fun AppRoot(requests: ExternalRequests, vm: FocusViewModel = viewModel()) {
                     onSound = vm::setSound,
                     onTimerNotification = vm::setShowTimerNotification,
                     onVerse = vm::setVerse,
+                    onVersesWhileFocusing = vm::setVersesWhileFocusing,
+                    onClosingWords = vm::setClosingWords,
+                    onReminder = vm::setReminder,
+                    onSaveSchedule = vm::saveSchedule,
+                    onDeleteSchedule = vm::deleteSchedule,
                     onChooseApps = { pickingApps = true },
                 )
             }
@@ -196,6 +203,7 @@ private data class FocusTabState(
     val stats: com.lostsheep.focus.data.FocusStats,
     val blockedCount: Int,
     val blockingReady: Boolean,
+    val intention: String,
 )
 
 private enum class FocusMode { Idle, Session, Completed, Ended, Break }
@@ -209,7 +217,7 @@ private fun FocusTab(
     onFixBlocking: () -> Unit,
     onEndRequest: () -> Unit,
 ) {
-    val (session, outcome, settings, stats, blockedCount, blockingReady) = vmState
+    val (session, outcome, settings, stats, blockedCount, blockingReady, intention) = vmState
     val onBreak = settings.breakEndsAtWall > 0L
     val mode = when {
         session != null -> FocusMode.Session
@@ -230,6 +238,7 @@ private fun FocusTab(
                     clock = vm.clock,
                     story = story,
                     blockingWarning = session.selectedBlockedApps.isNotEmpty() && !blockingReady,
+                    showVerses = settings.versesWhileFocusing,
                     onPause = vm::pause,
                     onResume = vm::resume,
                     onEndRequest = onEndRequest,
@@ -241,6 +250,8 @@ private fun FocusTab(
                 CompletionScreen(
                     outcome = outcome,
                     story = story,
+                    closing = closingFor(settings.closingWords, outcome.sessionId),
+                    onSaveReflection = { done, note -> vm.saveReflection(outcome.sessionId, done, note) },
                     onStartAnother = {
                         val minutes = (outcome.plannedMs / 60_000).toInt()
                         vm.dismissOutcome()
@@ -249,7 +260,9 @@ private fun FocusTab(
                     onTakeBreak = vm::startBreak,
                 )
             }
-            FocusMode.Ended -> if (outcome != null) EndedScreen(outcome, onStartNew = vm::dismissOutcome)
+            FocusMode.Ended -> if (outcome != null) {
+                EndedScreen(outcome, closingFor(settings.closingWords, outcome.sessionId), onStartNew = vm::dismissOutcome)
+            }
             FocusMode.Break -> BreakScreen(
                 endsAtWall = settings.breakEndsAtWall,
                 onEnd = vm::endBreak,
@@ -261,6 +274,8 @@ private fun FocusTab(
                 story = story,
                 blockedCount = blockedCount,
                 blockingReady = blockingReady,
+                intention = intention,
+                onIntentionChange = vm::setIntentionDraft,
                 onBegin = vm::begin,
                 onSelectDuration = vm::setDefaultDuration,
                 onChooseApps = onChooseApps,

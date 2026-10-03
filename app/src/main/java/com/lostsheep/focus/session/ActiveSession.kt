@@ -39,6 +39,8 @@ data class ActiveSession(
     val selectedBlockedApps: Set<String>,
     val sessionState: SessionState,
     val distractionsBlocked: Int,
+    /** What the person said they would focus on; empty when they skipped it. */
+    val intention: String = "",
 ) {
     val isActive: Boolean
         get() = sessionState == SessionState.RUNNING ||
@@ -102,6 +104,7 @@ data class ActiveSession(
         put("selectedBlockedApps", JSONArray(selectedBlockedApps.toList()))
         put("sessionState", sessionState.name)
         put("distractionsBlocked", distractionsBlocked)
+        put("intention", intention)
         // Snapshots for inspection and recovery; the authoritative values are recomputed from the clocks.
         put("elapsedTime", elapsedMs(clock))
         put("remainingTime", remainingMs(clock))
@@ -115,6 +118,7 @@ data class ActiveSession(
             durationMs: Long,
             blockedApps: Set<String>,
             clock: TimeSource,
+            intention: String = "",
         ) = ActiveSession(
             sessionId = sessionId,
             storyId = storyId,
@@ -129,6 +133,7 @@ data class ActiveSession(
             selectedBlockedApps = blockedApps,
             sessionState = SessionState.RUNNING,
             distractionsBlocked = 0,
+            intention = intention.trim(),
         )
 
         fun fromJson(json: String): ActiveSession? = runCatching {
@@ -148,6 +153,7 @@ data class ActiveSession(
                 selectedBlockedApps = (0 until apps.length()).map { apps.getString(it) }.toSet(),
                 sessionState = SessionState.valueOf(o.getString("sessionState")),
                 distractionsBlocked = o.optInt("distractionsBlocked", 0),
+                intention = o.optString("intention", ""),
             )
         }.getOrNull()
     }
@@ -161,6 +167,7 @@ data class SessionOutcome(
     val focusedMs: Long,
     val distractionsBlocked: Int,
     val endedAt: Long,
+    val intention: String = "",
 ) {
     fun toJson(): String = JSONObject().apply {
         put("sessionId", sessionId)
@@ -169,6 +176,7 @@ data class SessionOutcome(
         put("focusedMs", focusedMs)
         put("distractionsBlocked", distractionsBlocked)
         put("endedAt", endedAt)
+        put("intention", intention)
     }.toString()
 
     companion object {
@@ -181,6 +189,7 @@ data class SessionOutcome(
                 focusedMs = o.getLong("focusedMs"),
                 distractionsBlocked = o.getInt("distractionsBlocked"),
                 endedAt = o.getLong("endedAt"),
+                intention = o.optString("intention", ""),
             )
         }.getOrNull()
     }

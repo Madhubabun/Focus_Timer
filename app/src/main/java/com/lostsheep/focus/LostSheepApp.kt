@@ -6,6 +6,7 @@ import com.lostsheep.focus.data.BlockedAppEntity
 import com.lostsheep.focus.data.FocusSessionEntity
 import com.lostsheep.focus.data.LostSheepDatabase
 import com.lostsheep.focus.data.SettingsStore
+import com.lostsheep.focus.reminders.Reminders
 import com.lostsheep.focus.session.AndroidTimeSource
 import com.lostsheep.focus.session.SessionManager
 import com.lostsheep.focus.session.SessionNotifications
@@ -31,6 +32,14 @@ class AppContainer(context: Context) {
     val history: StateFlow<List<FocusSessionEntity>> =
         db.sessions().observeAll().stateIn(scope, SharingStarted.Eagerly, emptyList())
 
+    /** Starts a session with the person's saved choices (widget, schedules). False if one is already running. */
+    suspend fun startFocus(minutes: Int, intention: String = ""): Boolean {
+        val apps = db.blockedApps().list().map { it.packageName }.toSet()
+        val s = settings.settings.value
+        if (s.breakEndsAtWall > 0L) settings.update { it.copy(breakEndsAtWall = 0L) }
+        return sessionManager.start(minutes.coerceIn(1, 180) * 60_000L, s.storyId, apps, intention)
+    }
+
     fun setBlocked(packageName: String, label: String, blocked: Boolean) {
         scope.launch {
             if (blocked) db.blockedApps().insert(BlockedAppEntity(packageName, label))
@@ -45,5 +54,7 @@ class LostSheepApp : Application() {
     override fun onCreate() {
         super.onCreate()
         SessionNotifications.ensureChannels(this)
+        // Alarms do not survive an app update or a reboot; set the reminder and schedules again.
+        Reminders.sync(this, container.settings.settings.value)
     }
 }

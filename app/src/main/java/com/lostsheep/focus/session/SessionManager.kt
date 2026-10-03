@@ -11,9 +11,11 @@ import com.lostsheep.focus.data.FocusSessionEntity
 import com.lostsheep.focus.data.LostSheepDatabase
 import com.lostsheep.focus.data.SessionOutcomeKind
 import com.lostsheep.focus.data.SettingsStore
+import com.lostsheep.focus.widget.FocusWidget
 import java.util.UUID
+import java.util.concurrent.Executors
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,15 +75,26 @@ class SessionManager(
     val hasActiveSession: Boolean get() = _session.value?.isActive == true
 
     @Synchronized
-    fun start(durationMs: Long, storyId: String, blockedApps: Set<String>): Boolean {
+    fun start(durationMs: Long, storyId: String, blockedApps: Set<String>, intention: String = ""): Boolean {
         if (hasActiveSession) return false // only one focus session may exist at a time
-        val session = ActiveSession.start(UUID.randomUUID().toString(), storyId, durationMs, blockedApps, clock)
+        val session = ActiveSession.start(UUID.randomUUID().toString(), storyId, durationMs, blockedApps, clock, intention)
         _outcome.value = null
         prefs.edit().remove(KEY_OUTCOME).commit()
         publish(session)
         scheduleCompletionAlarm(session)
         startTimerService()
+        FocusWidget.refresh(context)
         return true
+    }
+
+    /** True when the timer service could be started (it can't from the background on newer Android). */
+    val serviceRunning: Boolean get() = lastServiceStart
+
+    /** Saves the after-session answer and note to the history; queued behind the session's own save. */
+    fun saveReflection(sessionId: String, intentionDone: Boolean?, reflection: String?) {
+        scope.launch(dbWriter) {
+            db.sessions().saveReflection(sessionId, intentionDone, reflection?.trim()?.takeIf { it.isNotEmpty() })
+        }
     }
 
     @Synchronized
@@ -154,6 +167,7 @@ class SessionManager(
             focusedMs = focused,
             distractionsBlocked = s.distractionsBlocked,
             endedAt = now,
+            intention = s.intention,
         )
         val record = FocusSessionEntity(
             id = s.sessionId,
@@ -164,6 +178,7 @@ class SessionManager(
             focusedMs = focused,
             outcome = (if (completed) SessionOutcomeKind.COMPLETED else SessionOutcomeKind.ABANDONED).name,
             distractionsBlocked = s.distractionsBlocked,
+            intention = s.intention.takeIf { it.isNotEmpty() },
         )
         prefs.edit()
             .remove(KEY_SESSION)
@@ -172,7 +187,10 @@ class SessionManager(
         cancelCompletionAlarm()
         _outcome.value = outcome
         _session.value = null
-        scope.launch(Dispatchers.IO) { db.sessions().insert(record) }
+        scope.launch(dbWriter) {
+            db.sessions().insert(record)
+            FocusWidget.refresh(context)
+        }
 
         if (completed) {
             SessionNotifications.showCompleted(context, outcome)
@@ -185,10 +203,12 @@ class SessionManager(
         _session.value = s
     }
 
+    private var lastServiceStart = false
+
     private fun startTimerService() {
-        runCatching {
+        lastServiceStart = runCatching {
             ContextCompat.startForegroundService(context, Intent(context, FocusTimerService::class.java))
-        }
+        }.isSuccess
     }
 
     private fun alarmIntent(): PendingIntent = PendingIntent.getBroadcast(
@@ -222,6 +242,9 @@ class SessionManager(
     }
 
     private companion object {
+        /** One writer, so a reflection is never saved before the session it belongs to. */
+        val dbWriter = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+
         const val KEY_SESSION = "session"
         const val KEY_OUTCOME = "outcome"
     }

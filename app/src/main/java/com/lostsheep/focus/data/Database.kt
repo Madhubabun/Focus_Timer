@@ -10,6 +10,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 /** A finished focus session (completed or ended early), kept for statistics and the Journey. */
@@ -24,6 +26,12 @@ data class FocusSessionEntity(
     /** [SessionOutcomeKind] name: COMPLETED or ABANDONED. */
     val outcome: String,
     val distractionsBlocked: Int,
+    /** What the session was for, if the person wrote it down. */
+    val intention: String? = null,
+    /** Whether they finished it: null until they answer. */
+    val intentionDone: Boolean? = null,
+    /** A short note or prayer written after the session. */
+    val reflection: String? = null,
 ) {
     val completed: Boolean get() = outcome == SessionOutcomeKind.COMPLETED.name
 }
@@ -43,6 +51,15 @@ interface FocusSessionDao {
 
     @Query("SELECT * FROM focus_sessions ORDER BY startedAt DESC")
     fun observeAll(): Flow<List<FocusSessionEntity>>
+
+    @Query("SELECT * FROM focus_sessions ORDER BY startedAt DESC")
+    suspend fun all(): List<FocusSessionEntity>
+
+    @Query("SELECT COUNT(*) FROM focus_sessions WHERE outcome = 'COMPLETED' AND endedAt >= :since")
+    suspend fun completedSince(since: Long): Int
+
+    @Query("UPDATE focus_sessions SET intentionDone = :done, reflection = :reflection WHERE id = :id")
+    suspend fun saveReflection(id: String, done: Boolean?, reflection: String?): Int
 }
 
 @Dao
@@ -55,11 +72,14 @@ interface BlockedAppDao {
 
     @Query("DELETE FROM blocked_apps WHERE packageName = :packageName")
     suspend fun delete(packageName: String)
+
+    @Query("SELECT * FROM blocked_apps")
+    suspend fun list(): List<BlockedAppEntity>
 }
 
 @Database(
     entities = [FocusSessionEntity::class, BlockedAppEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class LostSheepDatabase : RoomDatabase() {
@@ -68,6 +88,17 @@ abstract class LostSheepDatabase : RoomDatabase() {
 
     companion object {
         fun create(context: Context): LostSheepDatabase =
-            Room.databaseBuilder(context, LostSheepDatabase::class.java, "lost_sheep.db").build()
+            Room.databaseBuilder(context, LostSheepDatabase::class.java, "lost_sheep.db")
+                .addMigrations(MIGRATION_1_2)
+                .build()
+
+        /** Adds the session intention and the journal note. Existing history is kept. */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE focus_sessions ADD COLUMN intention TEXT")
+                db.execSQL("ALTER TABLE focus_sessions ADD COLUMN intentionDone INTEGER")
+                db.execSQL("ALTER TABLE focus_sessions ADD COLUMN reflection TEXT")
+            }
+        }
     }
 }

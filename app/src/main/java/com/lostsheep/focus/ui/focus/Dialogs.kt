@@ -9,14 +9,30 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TimeInput
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import com.lostsheep.focus.data.FocusSchedule
+import java.time.DayOfWeek
+import java.time.format.TextStyle
+import java.util.Locale
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -51,22 +67,104 @@ private fun SheepDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) 
 
 @Composable
 fun CustomDurationDialog(initial: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
-    var value by remember { mutableFloatStateOf(initial.toFloat()) }
+    var value by remember { mutableIntStateOf(initial.coerceIn(1, 180)) }
     SheepDialog(onDismiss) {
         Text("Custom focus", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(12.dp))
-        Text("${value.toInt()} minutes", style = MaterialTheme.typography.headlineMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { value = (value - 1).coerceAtLeast(1) }) { Text("–", style = MaterialTheme.typography.headlineSmall) }
+            Text(
+                if (value == 1) "1 minute" else "$value minutes",
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
+            TextButton(onClick = { value = (value + 1).coerceAtMost(180) }) { Text("+", style = MaterialTheme.typography.headlineSmall) }
+        }
         Slider(
-            value = value,
-            onValueChange = { value = (it / 5f).toInt() * 5f },
-            valueRange = 5f..180f,
+            value = value.toFloat(),
+            onValueChange = { value = snapMinutes(it) },
+            valueRange = 1f..180f,
             modifier = Modifier.fillMaxWidth(),
+        )
+        Text("Use – and + for an exact minute.", style = MaterialTheme.typography.labelMedium, color = LocalSheepColors.current.muted)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = { onConfirm(value) }) { Text("Set") }
+        }
+    }
+}
+
+/** Picks a time of day, as minutes after midnight. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TimeOfDayDialog(title: String, initialMinute: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
+    val state = rememberTimePickerState(initialHour = initialMinute / 60, initialMinute = initialMinute % 60)
+    SheepDialog(onDismiss) {
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(16.dp))
+        TimePicker(state = state)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = { onConfirm(state.hour * 60 + state.minute) }) { Text("Set") }
+        }
+    }
+}
+
+/** Adds or edits a scheduled focus session: time, days and length. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ScheduleDialog(initial: FocusSchedule, onDismiss: () -> Unit, onSave: (FocusSchedule) -> Unit) {
+    val time = rememberTimePickerState(initialHour = initial.minuteOfDay / 60, initialMinute = initial.minuteOfDay % 60)
+    var days by remember { mutableStateOf(initial.days) }
+    var minutes by remember { mutableIntStateOf(initial.durationMin) }
+    SheepDialog(onDismiss) {
+        Text("Scheduled focus", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(12.dp))
+        TimeInput(state = time)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            DayOfWeek.entries.forEach { d ->
+                val on = d in days
+                Text(
+                    d.getDisplayName(TextStyle.NARROW, Locale.getDefault()),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
+                        .toggleable(value = on, role = Role.Checkbox) { days = if (it) days + d else days - d }
+                        .semantics { contentDescription = d.getDisplayName(TextStyle.FULL, Locale.getDefault()) }
+                        .wrapContentHeight(),
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { minutes = (minutes - 5).coerceAtLeast(1) }) { Text("–", style = MaterialTheme.typography.titleLarge) }
+            Text("$minutes min", style = MaterialTheme.typography.titleLarge)
+            TextButton(onClick = { minutes = (if (minutes == 1) 5 else minutes + 5).coerceAtMost(180) }) { Text("+", style = MaterialTheme.typography.titleLarge) }
+        }
+        Text(
+            "The session starts by itself and your chosen apps wait until it ends.",
+            style = MaterialTheme.typography.labelMedium,
+            color = LocalSheepColors.current.muted,
+            textAlign = TextAlign.Center,
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onDismiss) { Text("Cancel") }
-            TextButton(onClick = { onConfirm(value.toInt().coerceAtLeast(5)) }) { Text("Set") }
+            TextButton(
+                enabled = days.isNotEmpty(),
+                onClick = { onSave(initial.copy(minuteOfDay = time.hour * 60 + time.minute, days = days, durationMin = minutes)) },
+            ) { Text("Save") }
         }
     }
+}
+
+/** Single minutes up to 10, then steps of 5, so the slider is easy to land on a round number. */
+fun snapMinutes(raw: Float): Int {
+    val m = raw.toInt().coerceIn(1, 180)
+    return if (m <= 10) m else ((m + 2) / 5 * 5).coerceIn(10, 180)
 }
 
 /** Shown when the app opens and a session is still going. Never discards it on its own. */
