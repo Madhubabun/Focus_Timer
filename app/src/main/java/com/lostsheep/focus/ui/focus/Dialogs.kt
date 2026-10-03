@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import com.lostsheep.focus.data.FocusSchedule
+import com.lostsheep.focus.story.Stories
+import androidx.compose.foundation.layout.width
 import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
@@ -91,6 +93,51 @@ fun CustomDurationDialog(initial: Int, onDismiss: () -> Unit, onConfirm: (Int) -
             TextButton(onClick = onDismiss) { Text("Cancel") }
             TextButton(onClick = { onConfirm(value) }) { Text("Set") }
         }
+    }
+}
+
+/** Choose which Bible story plays during focus. Each shows a small still from its journey. */
+@Composable
+fun StoryPickerDialog(selectedId: String, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    SheepDialog(onDismiss) {
+        Text("Choose a story", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(12.dp))
+        Stories.all.forEach { story ->
+            val selected = story.id == selectedId
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
+                    .toggleable(value = selected, role = Role.RadioButton) { onPick(story.id) }
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                story.Scene(
+                    progress = { 0.3f },
+                    time = { 0f },
+                    celebration = { -1f },
+                    modifier = Modifier
+                        .size(width = 84.dp, height = 64.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clearAndSetSemantics { },
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(story.title, style = MaterialTheme.typography.titleMedium)
+                    Text(story.reference, style = MaterialTheme.typography.labelMedium, color = LocalSheepColors.current.muted)
+                }
+                if (selected) Text("✓", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            }
+            Spacer(Modifier.height(6.dp))
+        }
+        Text(
+            "More stories coming: " + Stories.comingSoon.joinToString { it.first },
+            style = MaterialTheme.typography.labelMedium,
+            color = LocalSheepColors.current.muted,
+            textAlign = TextAlign.Center,
+        )
+        TextButton(onClick = onDismiss) { Text("Done") }
     }
 }
 

@@ -32,6 +32,8 @@ it home, moving forward only as you stay focused.
   valley at 20, one sheep per session), Today's Reflection ("Every focused moment is a step toward what matters."), and session history with each
   session's intention and journal note.
 - **Stats**: today's focus, sessions against the daily goal, streak, distractions blocked, intentions finished, last-7-days bars.
+- **Three stories**: The Lost Sheep, David & Goliath (five smooth stones, one sling, the giant falls) and
+  Noah's Ark (built plank by plank, two by two, the rain, the dove, the rainbow). Pick one from Home or Settings.
 - **Daily reminder**: an optional notification at a chosen time with a verse, skipped on days you already focused.
 - **Scheduled focus**: sessions that start by themselves at set times on chosen days, with app blocking.
 - **Home-screen widget**: today's sessions against the goal, the streak, and a Begin Focus button.

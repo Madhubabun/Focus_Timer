@@ -41,6 +41,7 @@ import com.lostsheep.focus.ui.focus.EndedScreen
 import com.lostsheep.focus.ui.focus.FocusHome
 import com.lostsheep.focus.ui.focus.FocusSessionScreen
 import com.lostsheep.focus.ui.focus.RecoveryDialog
+import com.lostsheep.focus.ui.focus.StoryPickerDialog
 import com.lostsheep.focus.ui.journey.JourneyScreen
 import com.lostsheep.focus.ui.settings.AppPickerScreen
 import com.lostsheep.focus.ui.settings.PermissionRequests
@@ -78,6 +79,7 @@ fun AppRoot(requests: ExternalRequests, vm: FocusViewModel = viewModel()) {
     var tab by rememberSaveable { mutableStateOf(Tab.Focus) }
     var pickingApps by rememberSaveable { mutableStateOf(false) }
     var askBlockingPermission by rememberSaveable { mutableStateOf(false) }
+    var choosingStory by rememberSaveable { mutableStateOf(false) }
 
     val active = session?.takeIf { it.isActive }
     val story = Stories.byId(active?.storyId ?: settings.storyId)
@@ -138,6 +140,7 @@ fun AppRoot(requests: ExternalRequests, vm: FocusViewModel = viewModel()) {
                     onChooseApps = { pickingApps = true },
                     onFixBlocking = { askBlockingPermission = true },
                     onEndRequest = { requests.confirmEnd.value = true },
+                    onChooseStory = { choosingStory = true },
                 )
                 Tab.Journey -> JourneyScreen(stats.totalCompleted, history, Verses.byId(settings.verseId), isSystemInDarkTheme())
                 Tab.Stats -> StatsScreen(stats, settings.dailyGoalSessions)
@@ -155,6 +158,7 @@ fun AppRoot(requests: ExternalRequests, vm: FocusViewModel = viewModel()) {
                     onReminder = vm::setReminder,
                     onSaveSchedule = vm::saveSchedule,
                     onDeleteSchedule = vm::deleteSchedule,
+                    onChooseStory = { choosingStory = true },
                     onChooseApps = { pickingApps = true },
                 )
             }
@@ -193,6 +197,12 @@ fun AppRoot(requests: ExternalRequests, vm: FocusViewModel = viewModel()) {
     } else if (active == null && requests.confirmEnd.value) {
         requests.confirmEnd.value = false
     }
+    if (choosingStory) {
+        StoryPickerDialog(settings.storyId, onDismiss = { choosingStory = false }) {
+            vm.setStory(it)
+            choosingStory = false
+        }
+    }
     PermissionRequests(askAccessibility = askBlockingPermission, askUsage = false) { askBlockingPermission = false }
 }
 
@@ -216,6 +226,7 @@ private fun FocusTab(
     onChooseApps: () -> Unit,
     onFixBlocking: () -> Unit,
     onEndRequest: () -> Unit,
+    onChooseStory: () -> Unit,
 ) {
     val (session, outcome, settings, stats, blockedCount, blockingReady, intention) = vmState
     val onBreak = settings.breakEndsAtWall > 0L
@@ -280,6 +291,7 @@ private fun FocusTab(
                 onSelectDuration = vm::setDefaultDuration,
                 onChooseApps = onChooseApps,
                 onFixBlocking = onFixBlocking,
+                onChooseStory = onChooseStory,
             )
         }
     }

@@ -145,6 +145,7 @@ fun SettingsScreen(
     onReminder: (Boolean, Int) -> Unit,
     onSaveSchedule: (FocusSchedule) -> Unit,
     onDeleteSchedule: (String) -> Unit,
+    onChooseStory: () -> Unit,
     onChooseApps: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -185,12 +186,7 @@ fun SettingsScreen(
         }
         Stepper("Daily goal", "${settings.dailyGoalSessions} sessions", onMinus = { onDailyGoal(settings.dailyGoalSessions - 1) }, onPlus = { onDailyGoal(settings.dailyGoalSessions + 1) })
         val story = Stories.byId(settings.storyId)
-        SettingRow("Focus story", "${story.title} · ${story.reference}") {}
-        Text(
-            "Coming later: " + Stories.comingSoon.joinToString { it.first },
-            style = MaterialTheme.typography.labelMedium,
-            color = muted,
-        )
+        SettingRow("Focus story", "${story.title} · ${story.reference}", onClick = onChooseStory)
         Spacer(Modifier.height(16.dp))
         FullWidthDivider()
 

@@ -83,6 +83,7 @@ class FocusViewModel(app: Application) : AndroidViewModel(app) {
         container.settings.update { it.copy(dailyGoalSessions = sessions.coerceIn(1, 12)) }
         FocusWidget.refresh(getApplication())
     }
+    fun setStory(id: String) = container.settings.update { it.copy(storyId = id) }
     fun setVersesWhileFocusing(on: Boolean) = container.settings.update { it.copy(versesWhileFocusing = on) }
     fun setClosingWords(choice: ClosingWords) = container.settings.update { it.copy(closingWords = choice) }
 

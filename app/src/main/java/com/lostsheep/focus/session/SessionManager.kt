@@ -11,6 +11,7 @@ import com.lostsheep.focus.data.FocusSessionEntity
 import com.lostsheep.focus.data.LostSheepDatabase
 import com.lostsheep.focus.data.SessionOutcomeKind
 import com.lostsheep.focus.data.SettingsStore
+import com.lostsheep.focus.story.Stories
 import com.lostsheep.focus.widget.FocusWidget
 import java.util.UUID
 import java.util.concurrent.Executors
@@ -193,7 +194,7 @@ class SessionManager(
         }
 
         if (completed) {
-            SessionNotifications.showCompleted(context, outcome)
+            SessionNotifications.showCompleted(context, outcome, Stories.byId(s.storyId).completionTitle)
             if (settings.settings.value.soundOn) AmbientSound.playCompletionChime()
         }
     }

@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import com.lostsheep.focus.data.FocusSessionEntity
 import com.lostsheep.focus.data.formatDuration
+import com.lostsheep.focus.story.Stories
 import com.lostsheep.focus.story.Verse
 import com.lostsheep.focus.ui.components.FullWidthDivider
 import com.lostsheep.focus.ui.theme.LocalSheepColors
@@ -110,7 +111,7 @@ private fun HistoryRow(s: FocusSessionEntity) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    if (s.completed) "The lost sheep was found" else "Ended early",
+                    if (s.completed) Stories.byId(s.storyId).completionTitle.removeSuffix(".") else "Ended early",
                     style = MaterialTheme.typography.labelMedium,
                     color = if (s.completed) LocalSheepColors.current.gold else muted,
                 )
