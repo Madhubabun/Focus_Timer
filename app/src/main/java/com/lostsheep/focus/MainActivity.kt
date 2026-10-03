@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import com.lostsheep.focus.ui.AppRoot
 import com.lostsheep.focus.ui.ExternalRequests
 import com.lostsheep.focus.ui.theme.LostSheepTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -20,7 +21,8 @@ class MainActivity : ComponentActivity() {
 
         // A fresh launch with a session still going: offer to resume, never discard it.
         val fromNotification = intent.getBooleanExtra(EXTRA_FROM_NOTIFICATION, false) ||
-            intent.getBooleanExtra(EXTRA_CONFIRM_END, false)
+            intent.getBooleanExtra(EXTRA_CONFIRM_END, false) ||
+            intent.getBooleanExtra(EXTRA_START_FOCUS, false)
         if (savedInstanceState == null && manager.hasActiveSession && !fromNotification) {
             requests.showRecovery.value = true
         }
@@ -57,6 +59,14 @@ class MainActivity : ComponentActivity() {
             requests.showRecovery.value = false
             manager.acknowledgeRecovery()
         }
+        if (intent.getBooleanExtra(EXTRA_START_FOCUS, false)) {
+            requests.showRecovery.value = false
+            val container = (application as LostSheepApp).container
+            if (!manager.hasActiveSession) {
+                container.scope.launch { container.startFocus(container.settings.settings.value.defaultDurationMin) }
+            }
+        }
+        intent.removeExtra(EXTRA_START_FOCUS)
         intent.removeExtra(EXTRA_CONFIRM_END)
         intent.removeExtra(EXTRA_OPEN_SETTINGS)
         intent.removeExtra(EXTRA_FROM_NOTIFICATION)
@@ -66,5 +76,6 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_FROM_NOTIFICATION = "from_notification"
         const val EXTRA_CONFIRM_END = "confirm_end"
         const val EXTRA_OPEN_SETTINGS = "open_settings"
+        const val EXTRA_START_FOCUS = "start_focus"
     }
 }

@@ -8,12 +8,14 @@ it home, moving forward only as you stay focused.
 
 ## What's in this MVP
 
-- **Focus home**: small illustration, large timer, 15 / 25 / 45 / 60 / Custom, Begin Focus, "🔥 4 day streak" and "Today: 1h 25m".
+- **Focus home**: small illustration, large timer, 15 / 25 / 45 / 60 / Custom (1 to 180 minutes), an optional
+  "What will you focus on?" line, Begin Focus, "🔥 4 day streak", "Today: 1h 25m" and today's goal (2/4).
 - **Focus session**: the story fills the whole screen. A small floating timer sits on top, with one ⏸ button;
   navigation is hidden. Captions ("One is missing.", "Keep going.", "You are not forgotten.") fade in and out,
-  and the final minute gets a thin gold countdown line.
+  and the final minute gets a thin gold countdown line. Every few minutes a Bible verse fades in over the
+  lower part of the scene and fades out again; it is chosen from focused time, so a paused session keeps the same verse.
 - **Story synced to progress**: the scene is a pure function of session progress (`LostSheepChoreography`),
-  with 60 named states (`scene_001_flock_grazing` … `scene_060_wide_valley_sunlight`). Pausing at 63% and
+  with 720 named search frames across ten terrains, then the Found and Return beats. Pausing at 63% and
   resuming shows the 63% frame. Nothing restarts.
 - **Optional AI video**: drop one clip per stage into `app/src/main/assets/stories/lost-sheep/`
   (see [docs/video-clips.md](docs/video-clips.md)) and the app steps through them in time with the session
@@ -21,15 +23,21 @@ it home, moving forward only as you stay focused.
 - **Pause / Resume / End**: pause freezes timer, scene and sound (apps stay blocked); End asks for
   confirmation and saves the session as ended early, with the focused time.
 - **Completion**: the scene finishes, then "The lost sheep is found.", "Well done. You stayed focused.",
-  and a small sheet: minutes focused, Session completed ✓, Start Another Session / Take a Break.
+  a short closing prayer or verse, and a small sheet: minutes focused, Session completed ✓, "Did you finish it?"
+  for the intention, an optional journal note, Start Another Session / Take a Break.
 - **App blocking**: pick apps (suggested distractions and "All games" shortcut). During a session an
   Accessibility service shows "The flock can wait." with the time remaining and Return to Focus.
   Usage Access works as a lighter fallback.
 - **My Journey**: a small landscape that grows with completed sessions (hill → trees at 5 → wider at 10 →
-  valley at 20, one sheep per session), Today's Reflection ("Every focused moment is a step toward what matters."), and session history.
-- **Stats**: today's focus, sessions, streak, distractions blocked, last-7-days bars.
+  valley at 20, one sheep per session), Today's Reflection ("Every focused moment is a step toward what matters."), and session history with each
+  session's intention and journal note.
+- **Stats**: today's focus, sessions against the daily goal, streak, distractions blocked, intentions finished, last-7-days bars.
+- **Daily reminder**: an optional notification at a chosen time with a verse, skipped on days you already focused.
+- **Scheduled focus**: sessions that start by themselves at set times on chosen days, with app blocking.
+- **Home-screen widget**: today's sessions against the goal, the streak, and a Begin Focus button.
 - **Settings**: durations, daily goal, blocked apps, permissions (with plain-language explanations),
-  sound, timer notification, Bible verse, privacy.
+  sound, timer notification, scheduled focus, daily reminder, verses while focusing, closing prayer or verse,
+  Journey verse, privacy.
 - **Sound** (optional): wind, a soft pad, occasional birds and a distant sheep, plus a gentle completion
   chime, all synthesized on the device. No audio files, no network.
 - Dark mode, landscape layout, TalkBack descriptions, and the system "remove animations" setting respected.
@@ -77,7 +85,8 @@ this folder to a repository.
 | Usage Access (optional) | Fallback detection of a blocked app if Accessibility is off. Android may not allow a screen to open from the background, so it also posts a gentle notification. |
 | Notifications | Optional ongoing timer with Pause / Resume / End, and the completion message. |
 | Foreground service (special use) | Keeps the timer, blocking checks and sound alive while the screen is off. |
-| Boot completed | Restores an active session after a restart. |
+| Boot completed | Restores an active session after a restart, and re-arms the reminder and scheduled sessions. |
+| Alarms & reminders (optional) | Lets a scheduled session start exactly on the minute. Without it, it starts within a minute or so. |
 
 No internet permission is requested. Nothing is backed up off the device.
 

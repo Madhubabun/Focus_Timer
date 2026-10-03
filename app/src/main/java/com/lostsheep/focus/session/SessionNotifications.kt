@@ -20,10 +20,13 @@ import com.lostsheep.focus.blocking.BlockedActivity
 object SessionNotifications {
     const val CHANNEL_SESSION = "focus_session"
     const val CHANNEL_ALERTS = "session_alerts"
+    const val CHANNEL_REMINDERS = "daily_reminder"
     const val ID_SESSION = 1
     const val ID_COMPLETED = 2
     const val ID_BLOCKING = 3
     const val ID_BLOCKED_APP = 4
+    const val ID_REMINDER = 5
+    const val ID_SCHEDULED = 6
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
@@ -40,6 +43,9 @@ object SessionNotifications {
                 setSound(null, null)
                 enableVibration(false)
             },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_REMINDERS, context.getString(R.string.channel_reminders), NotificationManager.IMPORTANCE_DEFAULT),
         )
     }
 

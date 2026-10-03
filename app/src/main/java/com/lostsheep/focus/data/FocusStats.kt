@@ -14,6 +14,9 @@ data class FocusStats(
     val totalCompleted: Int = 0,
     val totalFocusMs: Long = 0,
     val lastSevenDays: List<DayTotal> = emptyList(),
+    /** Sessions that had an intention and got an answer, and how many of those were finished. */
+    val intentionsAnswered: Int = 0,
+    val intentionsDone: Int = 0,
 )
 
 object FocusStatsCalculator {
@@ -54,6 +57,8 @@ object FocusStatsCalculator {
             totalCompleted = sessions.count { it.completed },
             totalFocusMs = sessions.sumOf { it.focusedMs },
             lastSevenDays = week,
+            intentionsAnswered = sessions.count { !it.intention.isNullOrEmpty() && it.intentionDone != null },
+            intentionsDone = sessions.count { !it.intention.isNullOrEmpty() && it.intentionDone == true },
         )
     }
 }

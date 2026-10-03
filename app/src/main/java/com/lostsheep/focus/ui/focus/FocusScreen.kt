@@ -61,6 +61,12 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.core.content.ContextCompat
@@ -71,7 +77,10 @@ import com.lostsheep.focus.session.ActiveSession
 import com.lostsheep.focus.session.SessionOutcome
 import com.lostsheep.focus.session.TimeSource
 import com.lostsheep.focus.session.formatClock
+import com.lostsheep.focus.story.Closing
 import com.lostsheep.focus.story.FocusStory
+import com.lostsheep.focus.story.FocusVerses
+import com.lostsheep.focus.story.Verse
 import com.lostsheep.focus.story.StoryVideo
 import com.lostsheep.focus.story.rememberStoryClips
 import com.lostsheep.focus.story.stageFraction
@@ -97,6 +106,8 @@ fun FocusHome(
     story: FocusStory,
     blockedCount: Int,
     blockingReady: Boolean,
+    intention: String,
+    onIntentionChange: (String) -> Unit,
     onBegin: (Int) -> Unit,
     onSelectDuration: (Int) -> Unit,
     onChooseApps: () -> Unit,
@@ -157,7 +168,18 @@ fun FocusHome(
             DurationChip(if (minutes in presets) "Custom" else "$minutes", selected = minutes !in presets) { showCustom = true }
         }
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(20.dp))
+        OutlinedTextField(
+            value = intention,
+            onValueChange = onIntentionChange,
+            placeholder = { Text("What will you focus on? (optional)") },
+            singleLine = true,
+            shape = RoundedCornerShape(16.dp),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Spacer(Modifier.height(24.dp))
         PrimaryPill("Begin Focus", onClick = { begin() }, modifier = Modifier.fillMaxWidth(0.8f))
 
         Spacer(Modifier.height(24.dp))
@@ -165,6 +187,8 @@ fun FocusHome(
             val streak = stats.currentStreakDays
             if (streak > 0) Indicator("🔥 $streak day streak", "$streak day streak")
             Indicator("Today: ${formatDuration(stats.todayFocusMs)}", "Focused today: ${formatDuration(stats.todayFocusMs)}")
+            val goal = settings.dailyGoalSessions
+            Indicator("${minOf(stats.todayCompleted, goal)}/$goal", "${stats.todayCompleted} of $goal sessions today")
         }
 
         Spacer(Modifier.height(20.dp))
@@ -240,6 +264,7 @@ fun FocusSessionScreen(
     clock: TimeSource,
     story: FocusStory,
     blockingWarning: Boolean,
+    showVerses: Boolean,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onEndRequest: () -> Unit,
@@ -260,6 +285,12 @@ fun FocusSessionScreen(
         derivedStateOf {
             frame.value
             story.phaseAt(session.progress(clock))
+        }
+    }
+    val verse by remember(session) {
+        derivedStateOf {
+            frame.value
+            FocusVerses.at(session.sessionId, session.elapsedMs(clock), session.plannedDurationMs)
         }
     }
     val beat by remember(session) {
@@ -319,10 +350,11 @@ fun FocusSessionScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(24.dp))
-            FloatingTimer(remainingSec)
+            FloatingTimer(remainingSec, session.intention)
             Spacer(Modifier.height(36.dp))
             StoryCaption(session.paused, phase.caption, phase.captionPersistent, phase.key)
             Spacer(Modifier.weight(1f))
+            if (showVerses && !session.paused) FocusVerseCard(verse.verse, verse.alpha)
             if (blockingWarning) BlockingWarning(onFixBlocking)
             if (!session.paused) PauseButton(onPause)
             Spacer(Modifier.height(32.dp))
@@ -345,7 +377,7 @@ fun FocusSessionScreen(
 }
 
 @Composable
-private fun FloatingTimer(remainingSec: Long) {
+private fun FloatingTimer(remainingSec: Long, intention: String) {
     val finalMinute = remainingSec in 1L..60L
     Column(
         Modifier
@@ -359,10 +391,47 @@ private fun FloatingTimer(remainingSec: Long) {
     ) {
         Text(formatClock(remainingSec * 1000), style = MaterialTheme.typography.displayMedium.copy(fontSize = 44.sp), color = GlassInk)
         Text("FOCUS TIME", style = MaterialTheme.typography.labelSmall, color = GlassMuted)
+        if (intention.isNotEmpty()) {
+            Text(
+                intention,
+                style = MaterialTheme.typography.labelMedium,
+                color = GlassInk,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                modifier = Modifier.padding(top = 4.dp).widthIn(max = 240.dp),
+            )
+        }
         // The last minute gets a quiet gold line counting down.
         Box(Modifier.padding(top = 6.dp).width(96.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(if (finalMinute) Gold.copy(alpha = 0.22f) else Color.Transparent)) {
             if (finalMinute) Box(Modifier.fillMaxHeight().fillMaxWidth(remainingSec / 60f).background(Gold))
         }
+    }
+}
+
+/** A verse over the lower part of the scene; it comes and goes with focused time, so pausing keeps it still. */
+@Composable
+private fun FocusVerseCard(verse: Verse, alpha: Float) {
+    if (alpha <= 0f) return
+    Column(
+        Modifier
+            .padding(horizontal = 28.dp)
+            .padding(bottom = 16.dp)
+            .widthIn(max = 420.dp)
+            .alpha(alpha)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Glass)
+            .padding(horizontal = 18.dp, vertical = 12.dp)
+            .semantics(mergeDescendants = true) {},
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "“${verse.text}”",
+            style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+            color = GlassInk,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(verse.reference.uppercase(), style = MaterialTheme.typography.labelSmall, color = GlassMuted)
     }
 }
 
@@ -471,6 +540,8 @@ private fun BlockingWarning(onFix: () -> Unit) {
 fun CompletionScreen(
     outcome: SessionOutcome,
     story: FocusStory,
+    closing: Closing?,
+    onSaveReflection: (intentionDone: Boolean?, reflection: String) -> Unit,
     onStartAnother: () -> Unit,
     onTakeBreak: () -> Unit,
 ) {
@@ -525,6 +596,12 @@ fun CompletionScreen(
             AnimatedVisibility(step >= 2, enter = fadeIn(tween(1_400))) {
                 Text("Well done. You stayed focused.", style = MaterialTheme.typography.bodyLarge.copy(shadow = shadow), color = Color.White, textAlign = TextAlign.Center)
             }
+            if (closing != null) {
+                Spacer(Modifier.height(18.dp))
+                AnimatedVisibility(step >= 2, enter = fadeIn(tween(2_000, delayMillis = 900))) {
+                    ClosingCard(closing)
+                }
+            }
         }
         AnimatedVisibility(
             step >= 3,
@@ -542,9 +619,11 @@ fun CompletionScreen(
             ) {
                 Box(Modifier.width(40.dp).height(4.dp).clip(CircleShape).background(MaterialTheme.colorScheme.outline))
                 Spacer(Modifier.height(16.dp))
-                Text("$minutes minutes focused", style = MaterialTheme.typography.titleLarge)
+                Text(if (minutes == 1L) "1 minute focused" else "$minutes minutes focused", style = MaterialTheme.typography.titleLarge)
                 Text("Session completed ✓", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(16.dp))
+                ReflectionForm(outcome, onSaveReflection)
+                Spacer(Modifier.height(16.dp))
                 PrimaryPill("Start Another Session", onClick = onStartAnother, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(10.dp))
                 SecondaryPill("Take a Break", onClick = onTakeBreak, modifier = Modifier.fillMaxWidth())
@@ -553,8 +632,71 @@ fun CompletionScreen(
     }
 }
 
+/** The closing prayer or verse, over the warm ending scene. */
 @Composable
-fun EndedScreen(outcome: SessionOutcome, onStartNew: () -> Unit) {
+private fun ClosingCard(closing: Closing) {
+    Column(
+        Modifier
+            .widthIn(max = 420.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(Glass)
+            .padding(horizontal = 20.dp, vertical = 14.dp)
+            .semantics(mergeDescendants = true) {},
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            if (closing.reference == null) closing.text else "“${closing.text}”",
+            style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+            color = GlassInk,
+            textAlign = TextAlign.Center,
+        )
+        if (closing.reference != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(closing.reference.uppercase(), style = MaterialTheme.typography.labelSmall, color = GlassMuted)
+        }
+    }
+}
+
+/** "Did you finish it?" and a short note for the journal. Both are optional. */
+@Composable
+private fun ReflectionForm(outcome: SessionOutcome, onSave: (Boolean?, String) -> Unit) {
+    var done by rememberSaveable(outcome.sessionId) { mutableStateOf<Boolean?>(null) }
+    var note by rememberSaveable(outcome.sessionId) { mutableStateOf("") }
+    var saved by rememberSaveable(outcome.sessionId) { mutableStateOf(false) }
+    val muted = LocalSheepColors.current.muted
+
+    if (saved) {
+        Text("Saved to your journal", style = MaterialTheme.typography.labelMedium, color = muted)
+        return
+    }
+    if (outcome.intention.isNotEmpty()) {
+        Text("Did you finish “${outcome.intention}”?", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DurationChip("Yes", selected = done == true) { done = true }
+            DurationChip("Not yet", selected = done == false) { done = false }
+        }
+        Spacer(Modifier.height(10.dp))
+    }
+    OutlinedTextField(
+        value = note,
+        onValueChange = { note = it.take(500) },
+        placeholder = { Text("A thought or prayer for your journal (optional)") },
+        shape = RoundedCornerShape(16.dp),
+        maxLines = 4,
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    if (done != null || note.isNotBlank()) {
+        TextButton(onClick = {
+            onSave(done, note)
+            saved = true
+        }) { Text("Save to journal") }
+    }
+}
+
+@Composable
+fun EndedScreen(outcome: SessionOutcome, closing: Closing?, onStartNew: () -> Unit) {
     val minutes = outcome.focusedMs / 60_000
     Column(
         Modifier.fillMaxSize().safeDrawingPadding().padding(32.dp),
@@ -569,6 +711,15 @@ fun EndedScreen(outcome: SessionOutcome, onStartNew: () -> Unit) {
             color = LocalSheepColors.current.muted,
             textAlign = TextAlign.Center,
         )
+        if (closing != null) {
+            Spacer(Modifier.height(24.dp))
+            Text(
+                if (closing.reference == null) closing.text else "“${closing.text}”",
+                style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+                textAlign = TextAlign.Center,
+            )
+            closing.reference?.let { Text(it.uppercase(), style = MaterialTheme.typography.labelSmall, color = LocalSheepColors.current.muted) }
+        }
         Spacer(Modifier.height(36.dp))
         PrimaryPill("Start New Session", onClick = onStartNew)
     }

@@ -87,7 +87,7 @@ fun JourneyScreen(completed: Int, history: List<FocusSessionEntity>, verse: Vers
             Text("Every focused moment is a step toward what matters.", style = MaterialTheme.typography.bodyMedium, color = muted)
             Spacer(Modifier.height(36.dp))
 
-            Text("SESSION HISTORY", style = MaterialTheme.typography.labelSmall, color = muted)
+            Text("SESSION HISTORY & JOURNAL", style = MaterialTheme.typography.labelSmall, color = muted)
             Spacer(Modifier.height(8.dp))
             if (history.isEmpty()) {
                 Text("Your first session will appear here.", style = MaterialTheme.typography.bodyMedium, color = muted)
@@ -114,6 +114,22 @@ private fun HistoryRow(s: FocusSessionEntity) {
                     style = MaterialTheme.typography.labelMedium,
                     color = if (s.completed) LocalSheepColors.current.gold else muted,
                 )
+                if (!s.intention.isNullOrEmpty()) {
+                    val mark = when (s.intentionDone) {
+                        true -> " ✓"
+                        false -> " · not yet"
+                        null -> ""
+                    }
+                    Text("Focus: ${s.intention}$mark", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+                }
+                if (!s.reflection.isNullOrEmpty()) {
+                    Text(
+                        s.reflection,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+                        color = muted,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
             }
             Text(formatDuration(s.focusedMs), style = MaterialTheme.typography.titleMedium)
         }

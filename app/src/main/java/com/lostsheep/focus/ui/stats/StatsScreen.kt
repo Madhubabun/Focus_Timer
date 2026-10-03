@@ -32,7 +32,7 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 @Composable
-fun StatsScreen(stats: FocusStats) {
+fun StatsScreen(stats: FocusStats, dailyGoal: Int) {
     val muted = LocalSheepColors.current.muted
     Column(
         Modifier
@@ -45,12 +45,18 @@ fun StatsScreen(stats: FocusStats) {
         Spacer(Modifier.height(28.dp))
         Row(Modifier.fillMaxWidth()) {
             Stat("Today's Focus", formatDuration(stats.todayFocusMs), Modifier.weight(1f))
-            Stat("Sessions", "${stats.todayCompleted}", Modifier.weight(1f))
+            Stat("Sessions · goal $dailyGoal", "${stats.todayCompleted}", Modifier.weight(1f))
         }
         Spacer(Modifier.height(28.dp))
         Row(Modifier.fillMaxWidth()) {
             Stat("Current Streak", if (stats.currentStreakDays == 1) "1 day" else "${stats.currentStreakDays} days", Modifier.weight(1f))
             Stat("Distractions Blocked", "${stats.distractionsBlocked}", Modifier.weight(1f))
+        }
+        if (stats.intentionsAnswered > 0) {
+            Spacer(Modifier.height(28.dp))
+            Row(Modifier.fillMaxWidth()) {
+                Stat("Intentions finished", "${stats.intentionsDone} of ${stats.intentionsAnswered}", Modifier.weight(1f))
+            }
         }
         Spacer(Modifier.height(36.dp))
         FullWidthDivider()
