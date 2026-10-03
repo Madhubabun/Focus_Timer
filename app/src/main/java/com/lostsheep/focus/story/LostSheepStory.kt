@@ -57,7 +57,7 @@ object LostSheepStory : FocusStory {
 
     override fun stateNameAt(progress: Float): String {
         val beat = LostSheepChoreography.beatAt(progress)
-        return "scene_%03d_%s".format(java.util.Locale.ROOT, beat.index, beat.name)
+        return "scene_%04d_%s".format(java.util.Locale.ROOT, beat.index, beat.name)
     }
 
     @Composable
@@ -175,6 +175,15 @@ private class Palette(w: Float) {
     val light = Color(0xFFFFE6A6)
     val cloud = Color(0xFFFFFFFF)
     val bird = Color(0xFF3E4A55)
+    val vista = tri(0xFF7FAE8A, 0xFF8CAE80, 0xFF9AA878, w)
+    val groveGround = tri(0xFF86B04C, 0xFF94B048, 0xFF9AA846, w)
+    val rockyGround = tri(0xFFAFA77A, 0xFFB8A774, 0xFFBDA070, w)
+    val woodsGround = tri(0xFF468A3A, 0xFF4E8636, 0xFF587E36, w)
+    val ridgeGrass = tri(0xFFA6B85A, 0xFFB4B654, 0xFFBEAE52, w)
+    val moundRock = tri(0xFF8C8058, 0xFF948052, 0xFF967A50, w)
+    val moundWood = tri(0xFF2A5A28, 0xFF325A26, 0xFF3A5626, w)
+    val oak = tri(0xFF3E7A3A, 0xFF487A36, 0xFF527236, w)
+    val shade = Color(0xFF1E3A22)
 }
 
 /**
@@ -188,7 +197,7 @@ private class Camera(val w: Float, val h: Float, val st: SceneState) {
     val lift = if (h > w * 1.4f) 0.09f * h else 0f
     fun zoom(par: Float) = 1f + (st.zoom - 1f) * par
     fun sx(x: Float, par: Float = 1f) = w / 2f + (x - st.cameraX * par) * xs * zoom(par)
-    fun sy(y: Float, par: Float = 1f) = ANCHOR * h + (y - ANCHOR) * h * zoom(par) + lift
+    fun sy(y: Float, par: Float = 1f) = ANCHOR * h + (y - ANCHOR - st.cameraY * par) * h * zoom(par) + lift
     fun worldX(screenX: Float, par: Float = 1f) = (screenX - w / 2f) / (xs * zoom(par)) + st.cameraX * par
 }
 
@@ -211,7 +220,7 @@ private fun frac(v: Float) = v - floor(v)
 private fun ground(x: Float) = LostSheepChoreography.groundY(x)
 
 /** Centre of the stream at depth [y] (scene fraction), winding toward us. */
-private fun streamX(y: Float) = LostSheepChoreography.STREAM_X + 0.05f * sin((y - 0.68f) * 16f) + (y - 0.70f) * 0.35f
+private fun streamX(y: Float) = LostSheepChoreography.STREAM_X + 0.05f * sin((y - 0.72f) * 16f) + (y - 0.74f) * 0.35f
 
 internal fun DrawScope.drawLostSheepScene(st: SceneState, t: Float, props: SceneProps) {
     val w = size.width
@@ -219,13 +228,14 @@ internal fun DrawScope.drawLostSheepScene(st: SceneState, t: Float, props: Scene
     if (w <= 0f || h <= 0f) return
     val c = Camera(w, h, st)
     val pal = Palette(st.warmth)
+    fun at(terrain: Terrain, x: Float = st.cameraX) = LostSheepChoreography.terrainWeight(terrain, x)
 
     // Sky.
     drawRect(Brush.verticalGradient(listOf(pal.skyTop, pal.skyHorizon), startY = 0f, endY = c.sy(0.56f, 0.1f)))
     drawRect(pal.skyHorizon, topLeft = Offset(0f, c.sy(0.56f, 0.1f)), size = Size(w, h))
 
     // Sun, lowering into the afternoon as the session goes on.
-    val sunC = Offset(w * (0.72f - 0.04f * (st.cameraX - 1.3f)), c.sy(0.20f + 0.16f * st.warmth, 0.05f))
+    val sunC = Offset(w * (0.72f - 0.04f * sin(st.cameraX * 0.21f)), c.sy(0.20f + 0.16f * st.warmth, 0.05f))
     val glowR = max(w, h) * (0.30f + 0.015f * sin(t * 0.2f))
     drawCircle(
         Brush.radialGradient(listOf(pal.sunGlow.copy(alpha = 0.50f), pal.sunGlow.copy(alpha = 0f)), center = sunC, radius = glowR),
@@ -255,44 +265,55 @@ internal fun DrawScope.drawLostSheepScene(st: SceneState, t: Float, props: Scene
         drawLine(col, Offset(bx + bs, by - flap), Offset(bx, by), strokeWidth = bs * 0.22f, cap = StrokeCap.Round)
     }
 
-    // Distant snow-capped range, then nearer mountains and hills.
+    // Distant snow-capped range, then nearer mountains.
     drawLayer(c, 0.08f, pal.peak) { peaks(it) }
     drawSnow(c, 0.08f, pal.snow) { peaks(it) }
     drawLayer(c, 0.18f, pal.farMountain) { ridge(it, 0.53f, 0.11f, 0.7f) }
     drawLayer(c, 0.32f, lerp(pal.nearMountain, pal.skyHorizon, 0.10f)) { ridge(it, 0.585f, 0.07f, 2.1f) }
 
-    // A calm lake in the valley below the mountains.
-    val lakeY = c.sy(0.603f, 0.45f)
-    val lakeL = c.sx(1.05f, 0.45f)
-    val lakeR = c.sx(2.25f, 0.45f)
-    if (lakeR > 0f && lakeL < w) {
-        val lh = h * 0.022f * c.zoom(0.45f)
+    // From the viewpoint and the ridge, more valleys open up below the mountains.
+    val vista = max(at(Terrain.WIDE_VALLEY), at(Terrain.HIGH_RIDGE)) * 0.9f + 0.1f * at(Terrain.SHEEP_HILL)
+    if (vista > 0.02f) {
+        drawLayer(c, 0.38f, pal.vista.copy(alpha = vista)) { ridge(it, 0.615f, 0.05f, 5.3f) }
+        drawLayer(c, 0.46f, lerp(pal.vista, pal.hills, 0.5f).copy(alpha = vista)) { ridge(it, 0.640f, 0.04f, 7.9f) }
+    }
+
+    // Calm lakes in the valleys (placed in the hills' own parallax space).
+    for ((lx, lw) in lakes) {
+        val lakeY = c.sy(0.603f, 0.45f)
+        val lakeL = c.sx(lx - lw / 2f, 0.45f)
+        val lakeR = c.sx(lx + lw / 2f, 0.45f)
+        if (lakeR < 0f || lakeL > w) continue
+        val lh = h * 0.022f * c.zoom(0.45f) * (0.8f + 0.4f * lw)
         drawOval(pal.lake, Offset(lakeL, lakeY - lh), Size(lakeR - lakeL, lh * 2f))
         for (k in 0 until 7) {
-            val lx = lakeL + (lakeR - lakeL) * (0.15f + 0.11f * k)
+            val sx = lakeL + (lakeR - lakeL) * (0.15f + 0.11f * k)
             val a = 0.35f + 0.35f * sin(t * 0.8f + k * 1.3f)
+            val sy = lakeY - lh * 0.2f + (k % 3) * lh * 0.3f
             drawLine(
                 pal.lakeLight.copy(alpha = a.coerceIn(0f, 1f)),
-                Offset(lx, lakeY - lh * 0.2f + (k % 3) * lh * 0.3f),
-                Offset(lx + (lakeR - lakeL) * 0.05f, lakeY - lh * 0.2f + (k % 3) * lh * 0.3f),
+                Offset(sx, sy),
+                Offset(sx + (lakeR - lakeL) * 0.05f, sy),
                 strokeWidth = (lh * 0.12f).coerceAtLeast(1f),
                 cap = StrokeCap.Round,
             )
         }
     }
-    drawLayer(c, 0.55f, pal.hills) { ridge(it, 0.655f, 0.045f, 4.2f) }
+    drawLayer(c, 0.55f, lerp(pal.hills, pal.ridgeGrass, 0.4f * at(Terrain.ROCKY_HILLSIDE))) { ridge(it, 0.655f, 0.045f, 4.2f) }
 
     // Distant cypresses on the hills.
-    for (k in 0 until 14) {
-        val x = -0.2f + k * 0.29f + 0.05f * sin(k * 2.7f)
+    for (k in LostSheepChoreography.slot(c.worldX(-40f, 0.55f), 0.29f)..LostSheepChoreography.slot(c.worldX(w + 40f, 0.55f), 0.29f)) {
+        val x = k * 0.29f + 0.05f * sin(k * 2.7f)
         val sx = c.sx(x, 0.55f)
-        if (sx < -20f || sx > w + 20f) continue
         val by = c.sy(ridge(x, 0.655f, 0.045f, 4.2f) + 0.012f, 0.55f)
-        val th = h * 0.035f * c.zoom(0.55f)
+        val th = h * 0.035f * c.zoom(0.55f) * (0.8f + 0.5f * LostSheepChoreography.hash(k, 9))
         drawOval(pal.cypress, Offset(sx - th * 0.13f, by - th), Size(th * 0.26f, th))
     }
 
-    // The field everyone walks on.
+    val xL = c.worldX(-0.15f * w)
+    val xR = c.worldX(1.15f * w)
+
+    // The ground everyone walks on, colored by the terrain beneath it.
     val field = Path()
     val steps = 56
     field.moveTo(-10f, h + 10f)
@@ -302,43 +323,79 @@ internal fun DrawScope.drawLostSheepScene(st: SceneState, t: Float, props: Scene
     }
     field.lineTo(w + 10f, h + 10f)
     field.close()
-    drawPath(field, Brush.verticalGradient(listOf(pal.ground, pal.groundDeep), startY = c.sy(0.68f), endY = h))
+    val stops = Array(9) { i -> (i / 8f) to groundColor(pal, c.worldX(w * i / 8f)) }
+    drawPath(field, Brush.horizontalGradient(*stops, startX = 0f, endX = w))
+    drawPath(field, Brush.verticalGradient(listOf(Color.Transparent, pal.groundDeep.copy(alpha = 0.75f)), startY = c.sy(0.68f), endY = h))
 
     val unit = h * c.zoom(1f) // one scene-height at the current zoom
 
-    // The winding stream, running down toward us.
+    // The mountain stream, running down toward us.
     drawStream(c, unit, t, pal)
 
-    // A worn path across the hills, where the shepherd walks.
+    // A worn path, broken where it fords the stream.
     val trail = Path()
     var started = false
-    var x = 0.70f
-    while (x <= 2.75f) {
+    var x = max(xL, 0.70f)
+    while (x <= xR) {
+        val ford = abs(x - LostSheepChoreography.STREAM_X) < 0.12f
         val px = c.sx(x)
         val py = c.sy(ground(x) + FEET + 0.004f + 0.008f * sin(x * 3.1f))
-        if (!started) trail.moveTo(px, py).also { started = true } else trail.lineTo(px, py)
+        if (ford) started = false else if (!started) trail.moveTo(px, py).also { started = true } else trail.lineTo(px, py)
         x += 0.02f
     }
-    drawPath(trail, pal.path.copy(alpha = 0.55f), style = Stroke(width = unit * 0.016f, cap = StrokeCap.Round))
+    val pathColor = lerp(pal.path, pal.rockLight, 0.5f * at(Terrain.ROCKY_HILLSIDE))
+    drawPath(trail, pathColor.copy(alpha = 0.55f), style = Stroke(width = unit * 0.016f, cap = StrokeCap.Round))
 
-    // Olive trees.
+    // Trees behind the path: a few near the flock, olive groves, then the woods.
     for (tx in LostSheepChoreography.trees) {
         val sx = c.sx(tx)
         if (sx < -unit * 0.3f || sx > w + unit * 0.3f) continue
         drawOlive(sx, c.sy(ground(tx) + 0.004f), unit, t + tx * 3f, pal)
     }
+    for (k in LostSheepChoreography.slot(xL - 0.2f, 0.08f)..LostSheepChoreography.slot(xR + 0.2f, 0.08f)) {
+        val tx = k * 0.08f + 0.06f * LostSheepChoreography.hash(k, 1)
+        if (tx < 1.4f) continue
+        val olive = 0.85f * at(Terrain.OLIVE_GROVE, tx) + 0.10f * at(Terrain.MEADOW, tx) + 0.12f * at(Terrain.WIDE_VALLEY, tx) +
+            0.10f * at(Terrain.SHEEP_HILL, tx)
+        val wood = 0.80f * at(Terrain.WOODED_HILLSIDE, tx) + 0.06f * at(Terrain.HIGH_RIDGE, tx)
+        val r = LostSheepChoreography.hash(k, 2)
+        // Spread through the depth of the land: small ones far up the slope, bigger ones nearer.
+        val depth = LostSheepChoreography.hash(k, 3)
+        val back = -0.045f * (1f - depth) + 0.002f
+        val scale = (0.55f + 0.5f * depth) * (0.85f + 0.3f * LostSheepChoreography.hash(k, 4))
+        val sx = c.sx(tx)
+        val by = c.sy(ground(tx) + back)
+        when {
+            r < olive -> drawOlive(sx, by, unit * scale, t + tx * 3f, pal)
+            r < olive + wood -> if (LostSheepChoreography.hash(k, 5) < 0.35f) drawCypress(sx, by, unit * scale, t + tx, pal) else drawOak(sx, by, unit * scale, t + tx * 2f, pal)
+        }
+    }
 
-    // Grass tufts along the field.
-    for (k in 0 until 110) {
-        val gx = -0.3f + k * 0.032f
+    // Rocks, many on the hillside, a few everywhere else.
+    for (k in LostSheepChoreography.slot(xL, 0.09f)..LostSheepChoreography.slot(xR, 0.09f)) {
+        val rx = k * 0.09f + 0.05f * LostSheepChoreography.hash(k, 11)
+        val density = 0.60f * at(Terrain.ROCKY_HILLSIDE, rx) + 0.22f * at(Terrain.HIGH_RIDGE, rx) +
+            0.10f * at(Terrain.STREAM, rx) + 0.04f
+        if (LostSheepChoreography.hash(k, 12) > density || rx < 1.0f) continue
+        val depth = LostSheepChoreography.hash(k, 13)
+        val near = depth > 0.55f
+        val ry = ground(rx) + if (near) 0.04f + 0.12f * (depth - 0.55f) / 0.45f else -0.002f
+        drawRock(c.sx(rx), c.sy(ry), unit * (0.45f + 0.7f * depth), pal)
+    }
+
+    // Grass tufts, thinning out on the rocky ground.
+    for (k in LostSheepChoreography.slot(xL, 0.022f)..LostSheepChoreography.slot(xR, 0.022f)) {
+        val gx = k * 0.022f
+        val sparse = 0.75f * at(Terrain.ROCKY_HILLSIDE, gx) + 0.3f * at(Terrain.HIGH_RIDGE, gx)
+        if (LostSheepChoreography.hash(k, 21) < sparse) continue
         val sx = c.sx(gx)
-        if (sx < -20f || sx > w + 20f) continue
-        val base = c.sy(ground(gx) + 0.012f + 0.06f * ((k * 7) % 5) / 5f)
+        val base = c.sy(ground(gx) + 0.012f + 0.30f * LostSheepChoreography.hash(k, 22) * LostSheepChoreography.hash(k, 23))
         val len = unit * 0.020f
+        val col = lerp(pal.tuft, pal.ridgeGrass, 0.6f * at(Terrain.HIGH_RIDGE, gx))
         for (b in -1..1) {
             val sway = sin(t * 1.3f + k * 0.7f + b) * len * 0.35f
             drawLine(
-                pal.tuft,
+                col,
                 Offset(sx + b * len * 0.25f, base),
                 Offset(sx + b * len * 0.45f + sway, base - len * (1f - 0.2f * abs(b))),
                 strokeWidth = (unit * 0.003f).coerceAtLeast(1f),
@@ -347,54 +404,64 @@ internal fun DrawScope.drawLostSheepScene(st: SceneState, t: Float, props: Scene
         }
     }
 
-    // Wildflowers, scattered toward us.
-    for (i in props.flowerX.indices) {
-        val fx = props.flowerX[i]
-        val sx = c.sx(fx)
-        if (sx < -10f || sx > w + 10f) continue
-        val d = props.flowerDepth[i]
-        val fy = c.sy(ground(fx) + 0.03f + 0.25f * d)
-        val col = when (i % 4) { 0 -> pal.flowerGold; 1 -> pal.flowerRed; 2 -> pal.flowerBlue; else -> pal.flower }
+    // Wildflowers: thick in the meadow and the valley, sparse among the rocks.
+    for (k in LostSheepChoreography.slot(xL, 0.014f)..LostSheepChoreography.slot(xR, 0.014f)) {
+        val fx = k * 0.014f + 0.013f * LostSheepChoreography.hash(k, 31)
+        val density = 0.35f + 0.6f * at(Terrain.MEADOW, fx) + 0.4f * at(Terrain.WIDE_VALLEY, fx) + 0.15f * at(Terrain.SHEEP_HILL, fx) -
+            0.3f * at(Terrain.ROCKY_HILLSIDE, fx) - 0.2f * at(Terrain.WOODED_HILLSIDE, fx)
+        if (LostSheepChoreography.hash(k, 32) > density) continue
+        val d = LostSheepChoreography.hash(k, 33)
+        val sway = 0.002f * sin(t * 1.1f + k)
+        val sx = c.sx(fx + sway)
+        val fy = c.sy(ground(fx) + 0.03f + 0.45f * d)
+        val col = when (k and 3) { 0 -> pal.flowerGold; 1 -> pal.flowerRed; 2 -> pal.flowerBlue; else -> pal.flower }
         val r = unit * 0.0045f * (0.6f + d)
         drawCircle(col.copy(alpha = 0.92f), r, Offset(sx, fy))
         if (r > 2.5f) drawCircle(Color(0xFFFFE9A0), r * 0.35f, Offset(sx, fy))
     }
 
-    // The ninety-nine: grazing, resting, looking around. At the end they gather toward the two.
+    // The ninety-nine: grazing in the home pasture. The path circles round, so the same pasture
+    // waits at the end of the journey, where they gather toward the returning shepherd.
     val sheepUnit = unit * 0.04f
-    for (i in props.flockX.indices) {
-        val d = props.flockDepth[i]
-        val ph = props.flockPhase[i]
-        val drift = 0.006f * sin(t * 0.03f + ph) + st.flockGather * 0.32f * (1f - 0.5f * d)
-        val fx = props.flockX[i] + drift
-        val sx = c.sx(fx)
-        val s = sheepUnit * (0.62f + 0.38f * (1f - d))
-        if (sx < -s * 2 || sx > w + s * 2) continue
-        val feet = c.sy(ground(fx) + 0.012f + 0.10f * (1f - d))
-        val gathering = st.flockGather > 0.05f
-        val facing = if (gathering) 1f else props.flockFacing[i]
-        if (props.flockResting[i] && !gathering) {
-            drawRestingSheep(sx, feet, s, facing, pal)
-        } else {
-            val graze = if (gathering) 0f else ((sin(t * 0.35f + ph * 3f) + 0.3f) / 1.3f).coerceIn(0f, 1f)
-            drawSheep(sx, feet, s, facing, graze, if (gathering && st.flockGather < 1f) sin(t * 6f + ph) else 0f, pal)
+    for (home in 0..1) {
+        val offset = home * LostSheepChoreography.LOOP
+        if (offset + LostSheepChoreography.FLOCK_END + 0.3f < xL || offset - 0.3f > xR) continue
+        for (i in props.flockX.indices) {
+            val d = props.flockDepth[i]
+            val ph = props.flockPhase[i]
+            val gathering = home == 1 && st.flockGather > 0.05f
+            val drift = 0.006f * sin(t * 0.03f + ph) - (if (home == 1) st.flockGather * 0.30f * (1f - 0.5f * d) else 0f)
+            val fx = props.flockX[i] + offset + drift
+            val sx = c.sx(fx)
+            val s = sheepUnit * (0.62f + 0.38f * (1f - d))
+            if (sx < -s * 2 || sx > w + s * 2) continue
+            val feet = c.sy(ground(fx) + 0.012f + 0.10f * (1f - d))
+            val facing = if (gathering) -1f else props.flockFacing[i]
+            if (props.flockResting[i] && !gathering) {
+                drawRestingSheep(sx, feet, s, facing, pal)
+            } else {
+                val graze = if (gathering) 0f else ((sin(t * 0.35f + ph * 3f) + 0.3f) / 1.3f).coerceIn(0f, 1f)
+                drawSheep(sx, feet, s, facing, graze, if (gathering && st.flockGather < 1f) sin(t * 6f + ph) else 0f, pal)
+            }
         }
     }
 
     // Butterflies over the flowers.
-    for (i in 0 until 6) {
-        val bxw = 0.35f + i * 0.46f + 0.05f * sin(t * 0.31f + i * 2f)
+    for (k in LostSheepChoreography.slot(xL, 0.45f)..LostSheepChoreography.slot(xR, 0.45f)) {
+        val base = k * 0.45f
+        val meadowy = 0.25f + 0.7f * (at(Terrain.MEADOW, base) + at(Terrain.WIDE_VALLEY, base) + at(Terrain.PASTURE, base))
+        if (LostSheepChoreography.hash(k, 41) > meadowy) continue
+        val bxw = base + 0.2f + 0.05f * sin(t * 0.31f + k * 2f)
         val sx = c.sx(bxw)
-        if (sx < -20f || sx > w + 20f) continue
-        val by = c.sy(ground(bxw) + 0.06f - 0.03f * abs(sin(t * 0.9f + i)))
+        val by = c.sy(ground(bxw) + 0.06f - 0.03f * abs(sin(t * 0.9f + k)))
         val bs = unit * 0.006f
-        val open = 0.25f + 0.75f * abs(sin(t * 9f + i * 1.3f))
-        val col = when (i % 3) { 0 -> Color(0xFFFFF4D6); 1 -> Color(0xFFFFCF4A); else -> Color(0xFFF2A65A) }
+        val open = 0.25f + 0.75f * abs(sin(t * 9f + k * 1.3f))
+        val col = when ((k % 3 + 3) % 3) { 0 -> Color(0xFFFFF4D6); 1 -> Color(0xFFFFCF4A); else -> Color(0xFFF2A65A) }
         drawOval(col, Offset(sx - bs * 1.4f * open, by - bs), Size(bs * 1.4f * open, bs * 1.3f))
         drawOval(col, Offset(sx, by - bs), Size(bs * 1.4f * open, bs * 1.3f))
     }
 
-    // The one that wandered away, until it is carried home. A small bell marks it.
+    // The one that wandered away, until it is carried home. A small bell on a red cord marks it.
     val sheepS = sheepUnit * 1.05f
     if (!st.carrying) {
         val lx = st.lostSheepX
@@ -403,7 +470,7 @@ internal fun DrawScope.drawLostSheepScene(st: SceneState, t: Float, props: Scene
         drawSheep(c.sx(lx), c.sy(ground(lx) + FEET), sheepS, st.lostSheepFacing, headDown, swing, pal, bell = true)
     }
 
-    // Rocks the shepherd searches behind.
+    // The rock it sheltered behind.
     for (rx in LostSheepChoreography.rocks) {
         val sx = c.sx(rx)
         if (sx < -unit * 0.2f || sx > w + unit * 0.2f) continue
@@ -413,7 +480,7 @@ internal fun DrawScope.drawLostSheepScene(st: SceneState, t: Float, props: Scene
     // The Good Shepherd.
     drawShepherd(c.sx(st.shepherdX), c.sy(ground(st.shepherdX) + FEET), unit * 0.2f, st, t, pal, sheepS)
 
-    // A soft rise of meadow right in front of us.
+    // A soft rise of ground right in front of us.
     val mound = Path()
     mound.moveTo(-10f, h + 10f)
     for (i in 0..32) {
@@ -423,9 +490,27 @@ internal fun DrawScope.drawLostSheepScene(st: SceneState, t: Float, props: Scene
     }
     mound.lineTo(w + 10f, h + 10f)
     mound.close()
-    drawPath(mound, pal.mound)
+    val moundColor = lerp(lerp(pal.mound, pal.moundRock, 0.45f * at(Terrain.ROCKY_HILLSIDE)), pal.moundWood, at(Terrain.WOODED_HILLSIDE))
+    drawPath(mound, moundColor)
+
+    // Close bushes and branches we pass in the grove and the woods.
+    val leafy = max(at(Terrain.OLIVE_GROVE), at(Terrain.WOODED_HILLSIDE))
+    if (leafy > 0.02f) {
+        val par = 1.35f
+        for (k in LostSheepChoreography.slot(c.worldX(-0.3f * w, par), 0.42f)..LostSheepChoreography.slot(c.worldX(1.3f * w, par), 0.42f)) {
+            if (LostSheepChoreography.hash(k, 51) > 0.55f) continue
+            val bx = c.sx(k * 0.42f + 0.2f * LostSheepChoreography.hash(k, 52), par)
+            val br = w * (0.10f + 0.06f * LostSheepChoreography.hash(k, 53))
+            val col = lerp(pal.olive, pal.oak, at(Terrain.WOODED_HILLSIDE)).copy(alpha = 0.92f * leafy)
+            val sway = sin(t * 0.5f + k) * br * 0.03f
+            drawCircle(col, br, Offset(bx + sway, h + br * 0.35f))
+            drawCircle(col, br * 0.75f, Offset(bx - br * 0.8f + sway, h + br * 0.15f))
+            drawCircle(col, br * 0.7f, Offset(bx + br * 0.85f + sway, h + br * 0.2f))
+        }
+    }
 
     // Foreground grass, closest to us, moving most.
+    val fgCol = lerp(pal.fgGrass, pal.moundRock, 0.5f * at(Terrain.ROCKY_HILLSIDE))
     for (i in props.bladeX.indices) {
         val bx = (frac((props.bladeX[i] - st.cameraX * 0.25f) / 1.3f) * 1.3f - 0.15f) * w
         val len = props.bladeLen[i] * h * 0.06f
@@ -435,8 +520,26 @@ internal fun DrawScope.drawLostSheepScene(st: SceneState, t: Float, props: Scene
             moveTo(bx, h + 2f)
             quadraticTo(bx + sway * 0.3f, h - len * 0.5f, bx + sway, h - len)
         }
-        drawPath(blade, pal.fgGrass.copy(alpha = 0.85f), style = Stroke(width = (w * 0.008f).coerceAtLeast(1.5f), cap = StrokeCap.Round))
+        drawPath(blade, fgCol.copy(alpha = 0.85f), style = Stroke(width = (w * 0.008f).coerceAtLeast(1.5f), cap = StrokeCap.Round))
     }
+
+    // Sunlight slanting through the olive branches; cooler shade under the trees.
+    val grove = at(Terrain.OLIVE_GROVE)
+    if (grove > 0.02f) {
+        for (k in 0 until 4) {
+            val x0 = w * (0.1f + 0.27f * k) + w * 0.05f * sin(t * 0.05f + k)
+            val ray = Path().apply {
+                moveTo(x0, 0f)
+                lineTo(x0 + w * 0.08f, 0f)
+                lineTo(x0 - w * 0.12f, h)
+                lineTo(x0 - w * 0.24f, h)
+                close()
+            }
+            drawPath(ray, Brush.verticalGradient(listOf(pal.light.copy(alpha = 0.16f * grove), Color.Transparent), startY = 0f, endY = h))
+        }
+    }
+    val shade = at(Terrain.WOODED_HILLSIDE)
+    if (shade > 0.02f) drawRect(pal.shade.copy(alpha = 0.12f * shade))
 
     // Sunlight: a gentle warmth through the session that fills the valley at the end.
     drawRect(
@@ -455,6 +558,19 @@ internal fun DrawScope.drawLostSheepScene(st: SceneState, t: Float, props: Scene
             drawCircle(pal.light.copy(alpha = a.coerceIn(0f, 1f)), props.moteSize[i] * density, Offset(mx, my))
         }
     }
+}
+
+/** Lakes in the hills' parallax space: (centre, width). Seen early, from the viewpoint, and from the ridge. */
+private val lakes = listOf(1.65f to 1.2f, 3.75f to 1.4f, 5.75f to 0.9f)
+
+private fun groundColor(pal: Palette, x: Float): Color {
+    fun at(terrain: Terrain) = LostSheepChoreography.terrainWeight(terrain, x)
+    var col = pal.ground
+    col = lerp(col, pal.groveGround, 0.6f * at(Terrain.OLIVE_GROVE))
+    col = lerp(col, pal.rockyGround, 0.75f * at(Terrain.ROCKY_HILLSIDE))
+    col = lerp(col, pal.woodsGround, 0.7f * at(Terrain.WOODED_HILLSIDE))
+    col = lerp(col, pal.ridgeGrass, 0.55f * at(Terrain.HIGH_RIDGE))
+    return col
 }
 
 private fun DrawScope.drawCloud(cx: Float, cy: Float, r: Float, col: Color) {
@@ -506,7 +622,7 @@ private inline fun DrawScope.drawSnow(c: Camera, par: Float, color: Color, heigh
 
 private fun DrawScope.drawStream(c: Camera, unit: Float, t: Float, pal: Palette) {
     val w = size.width
-    val top = ground(LostSheepChoreography.STREAM_X) - 0.004f
+    val top = ground(LostSheepChoreography.STREAM_X) - 0.022f
     val n = 40
     val left = ArrayList<Offset>(n + 1)
     val right = ArrayList<Offset>(n + 1)
@@ -538,6 +654,44 @@ private fun DrawScope.drawStream(c: Camera, unit: Float, t: Float, pal: Palette)
             cap = StrokeCap.Round,
         )
     }
+    // Stepping stones where the path fords it.
+    val sy = ground(LostSheepChoreography.STREAM_X) + FEET + 0.006f
+    val cx = streamX(sy)
+    for (k in -2..2) {
+        val sx = c.sx(cx + k * 0.022f)
+        val r = unit * (0.011f + 0.002f * (k and 1))
+        drawOval(pal.rock, Offset(sx - r * 1.3f, c.sy(sy) - r * 0.55f), Size(r * 2.6f, r * 1.1f))
+        drawOval(pal.rockLight, Offset(sx - r * 0.8f, c.sy(sy) - r * 0.55f), Size(r * 1.4f, r * 0.45f))
+    }
+}
+
+/** A tall, dark Mediterranean cypress. */
+private fun DrawScope.drawCypress(x: Float, baseY: Float, unit: Float, t: Float, pal: Palette) {
+    val th = unit * 0.20f
+    val sway = sin(t * 0.5f) * th * 0.01f
+    drawOval(Color.Black.copy(alpha = 0.10f), Offset(x - th * 0.12f, baseY - th * 0.02f), Size(th * 0.24f, th * 0.05f))
+    drawLine(pal.trunk, Offset(x, baseY), Offset(x, baseY - th * 0.12f), th * 0.04f, StrokeCap.Round)
+    val body = Path().apply {
+        moveTo(x - th * 0.10f, baseY - th * 0.08f)
+        quadraticTo(x - th * 0.13f, baseY - th * 0.55f, x + sway, baseY - th)
+        quadraticTo(x + th * 0.13f, baseY - th * 0.55f, x + th * 0.10f, baseY - th * 0.08f)
+        close()
+    }
+    drawPath(body, pal.cypress)
+    drawLine(pal.oliveLight.copy(alpha = 0.25f), Offset(x - th * 0.03f, baseY - th * 0.2f), Offset(x - th * 0.02f + sway, baseY - th * 0.8f), th * 0.02f, StrokeCap.Round)
+}
+
+/** A rounded broadleaf tree for the wooded hillside. */
+private fun DrawScope.drawOak(x: Float, baseY: Float, unit: Float, t: Float, pal: Palette) {
+    val th = unit * 0.16f
+    val sway = sin(t * 0.55f) * th * 0.015f
+    drawOval(Color.Black.copy(alpha = 0.12f), Offset(x - th * 0.45f, baseY - th * 0.03f), Size(th * 0.9f, th * 0.08f))
+    drawLine(pal.trunk, Offset(x, baseY), Offset(x + sway, baseY - th * 0.55f), th * 0.07f, StrokeCap.Round)
+    val top = Offset(x + sway, baseY - th * 0.75f)
+    val lobes = floatArrayOf(-0.30f, 0.0f, 0.30f, -0.15f, 0.16f)
+    val lobesY = floatArrayOf(0.08f, -0.10f, 0.08f, -0.22f, -0.20f)
+    for (i in lobes.indices) drawCircle(pal.oak, th * 0.26f, Offset(top.x + lobes[i] * th, top.y + lobesY[i] * th))
+    drawCircle(pal.oliveLight.copy(alpha = 0.25f), th * 0.12f, Offset(top.x - th * 0.1f, top.y - th * 0.2f))
 }
 
 /** A silvery olive tree with a gnarled trunk. */
